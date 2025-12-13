@@ -103,13 +103,25 @@ pipenv run python app.py
 
 ```
 clouddisk/
-├── app.py              # Flask应用主文件
+├── app.py              # Flask应用主文件（路由和主要逻辑）
 ├── config.py           # 配置文件（所有配置项集中管理）
 ├── Pipfile             # pipenv依赖配置
 ├── Pipfile.lock        # 依赖锁定文件（自动生成）
+├── requirements.txt    # 依赖列表
+├── src/                # 源代码模块
+│   ├── __init__.py     # 模块初始化
+│   ├── utils.py        # 工具函数（文件名处理、大小格式化等）
+│   ├── path_utils.py   # 路径处理工具
+│   ├── file_info.py    # 文件信息获取
+│   ├── file_tree.py    # 文件树构建
+│   └── search.py       # 文件搜索功能
 ├── templates/          # HTML模板目录
 │   └── index.html      # 主页面
 ├── static/             # 静态资源目录
+│   ├── css/            # CSS样式文件
+│   │   └── main.css    # 主样式文件
+│   ├── js/             # JavaScript文件
+│   │   └── main.js     # 主脚本文件
 │   └── image/          # 图片资源
 │       └── demo.png    # 演示图片
 ├── uploads/            # 文件上传目录（自动创建）
@@ -258,7 +270,11 @@ clouddisk/
 ## 🛠️ 技术栈
 
 - **后端**：Flask (Python)
+  - 模块化设计，代码结构清晰
+  - `src/` 目录包含工具函数、文件处理、搜索等模块
 - **前端**：HTML5 + CSS3 + JavaScript (原生)
+  - CSS和JS代码分离到独立文件
+  - 响应式设计，支持移动端
 - **依赖管理**：pipenv
 - **文件存储**：本地文件系统
 
@@ -272,6 +288,10 @@ clouddisk/
 - ✅ 右键菜单
 - ✅ 响应式设计
 - ✅ 中文支持
+- ✅ 代码模块化重构
+  - 后端代码按功能拆分到 `src/` 模块
+  - 前端CSS和JS代码分离到独立文件
+  - 代码结构更清晰，便于维护和扩展
 
 ## 📄 许可证
 
