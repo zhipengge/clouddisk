@@ -97,6 +97,111 @@
             align-items: center;
         }
 
+        .search-box {
+            flex: 1;
+            min-width: 200px;
+            max-width: 400px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 40px 10px 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 25px;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #999;
+            pointer-events: none;
+        }
+
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 1000;
+            margin-top: 5px;
+            display: none;
+        }
+
+        .search-results.show {
+            display: block;
+        }
+
+        .search-result-item {
+            padding: 12px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: background 0.2s ease;
+        }
+
+        .search-result-item:hover {
+            background: #f8f9fa;
+        }
+
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
+
+        .search-result-icon {
+            font-size: 1.2em;
+        }
+
+        .search-result-info {
+            flex: 1;
+        }
+
+        .search-result-name {
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .search-result-path {
+            font-size: 0.85em;
+            color: #999;
+        }
+
+        .search-highlight {
+            background: #ffebee;
+            color: #c62828;
+            font-weight: 600;
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+
+        .search-result-count {
+            padding: 8px 15px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            font-size: 0.85em;
+            color: #666;
+            text-align: center;
+        }
+
         .btn {
             display: inline-flex;
             align-items: center;
@@ -484,9 +589,11 @@
             padding: 10px 20px;
             background: #e8eaf6;
             border-radius: 10px;
-            margin-bottom: 15px;
             font-size: 0.9em;
             color: #667eea;
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
         }
 
         .context-menu {
@@ -625,6 +732,11 @@
                 <button class="btn btn-secondary" onclick="loadTree()">
                     🔄 刷新
                 </button>
+                <div class="search-box">
+                    <input type="text" id="searchInput" class="search-input" placeholder="搜索文件或文件夹...">
+                    <div class="search-icon">🔍</div>
+                    <div class="search-results" id="searchResults"></div>
+                </div>
                 <div class="current-folder" id="currentFolder" style="display: none;">
                     当前文件夹: <span id="currentFolderPath">/</span>
                 </div>
@@ -757,27 +869,43 @@
 
     <!-- 右键菜单 -->
     <div class="context-menu" id="contextMenu">
-        <div class="context-menu-item" onclick="contextMenuCreateFile()">
+        <div class="context-menu-item" id="menuCreateFile" onclick="contextMenuCreateFile()">
             <span>📄</span>
             <span>新建文件</span>
         </div>
-        <div class="context-menu-item" onclick="contextMenuCreateFolder()">
+        <div class="context-menu-item" id="menuCreateFolder" onclick="contextMenuCreateFolder()">
             <span>📁</span>
             <span>新建文件夹</span>
         </div>
-        <div class="context-menu-divider"></div>
-        <div class="context-menu-item" onclick="contextMenuRename()">
+        <div class="context-menu-divider" id="menuDivider1"></div>
+        <div class="context-menu-item" id="menuRename" onclick="contextMenuRename()">
             <span>✏️</span>
             <span>重命名</span>
         </div>
-        <div class="context-menu-item" onclick="contextMenuMove()">
+        <div class="context-menu-item" id="menuMove" onclick="contextMenuMove()">
             <span>📦</span>
             <span>移动</span>
         </div>
-        <div class="context-menu-divider"></div>
-        <div class="context-menu-item danger" onclick="contextMenuDelete()">
+        <div class="context-menu-divider" id="menuDivider2"></div>
+        <div class="context-menu-item" id="menuRestore" onclick="contextMenuRestore()">
+            <span>♻️</span>
+            <span>恢复</span>
+        </div>
+        <div class="context-menu-item" id="menuRestoreAll" onclick="contextMenuRestoreAll()">
+            <span>🔄</span>
+            <span>一键恢复</span>
+        </div>
+        <div class="context-menu-item" id="menuEmptyTrash" onclick="contextMenuEmptyTrash()">
+            <span>🗑️</span>
+            <span>清空回收站</span>
+        </div>
+        <div class="context-menu-item danger" id="menuDelete" onclick="contextMenuDelete()">
             <span>🗑️</span>
             <span>删除</span>
+        </div>
+        <div class="context-menu-item danger" id="menuPermanentDelete" onclick="contextMenuPermanentDelete()">
+            <span>⚠️</span>
+            <span>永久删除</span>
         </div>
     </div>
 
@@ -791,6 +919,10 @@
         // 操作历史记录（最多5步）
         let operationHistory = [];
         const MAX_HISTORY = 5;
+        
+        // 搜索相关
+        let searchTimeout = null;
+        let expandedPaths = new Set(); // 记录展开的文件夹路径
 
         // 加载文件树
         async function loadTree() {
@@ -807,17 +939,24 @@
                     updateFolderSelects();
                     loadStats();
                     loadServerInfo();
+                    
+                    // 恢复展开状态
+                    restoreExpandedState();
+                    
+                    return Promise.resolve();
                 } else {
                     browser.innerHTML = `<div class="empty-state">
                         <div class="empty-icon">⚠️</div>
                         <div class="empty-text">加载失败: ${data.error}</div>
                     </div>`;
+                    return Promise.reject(new Error(data.error));
                 }
             } catch (error) {
                 browser.innerHTML = `<div class="empty-state">
                     <div class="empty-icon">⚠️</div>
                     <div class="empty-text">加载失败: ${error.message}</div>
                 </div>`;
+                return Promise.reject(error);
             }
         }
 
@@ -855,6 +994,10 @@
                 itemDiv.className = 'tree-item';
                 itemDiv.dataset.path = item.path;
                 itemDiv.dataset.isDir = item.is_dir;
+                if (item.is_trash) {
+                    itemDiv.dataset.isTrash = 'true';
+                    itemDiv.dataset.undoId = item.undo_id || '';
+                }
 
                 const contentDiv = document.createElement('div');
                 contentDiv.className = 'tree-item-content draggable';
@@ -888,17 +1031,30 @@
                     html += `<span class="tree-icon">${icon}</span>`;
                 }
 
-                html += `<span class="tree-name" onclick="selectItem('${escapeHtml(item.path)}', ${item.is_dir}, event)" ondragstart="event.stopPropagation()">${escapeHtml(item.name)}</span>`;
+                if (item.is_dir) {
+                    // 文件夹名称点击时展开/收起
+                    html += `<span class="tree-name" onclick="handleFolderNameClick(event, '${escapeHtml(item.path)}', ${item.is_dir})" ondragstart="event.stopPropagation()">${escapeHtml(item.name)}</span>`;
+                } else {
+                    // 文件名称点击时选择
+                    html += `<span class="tree-name" onclick="selectItem('${escapeHtml(item.path)}', ${item.is_dir}, event)" ondragstart="event.stopPropagation()">${escapeHtml(item.name)}</span>`;
+                }
                 html += `<span class="tree-size">${item.size_human}</span>`;
                 html += `<span class="tree-date">${item.modified}</span>`;
                 
                 html += `<div class="tree-actions">`;
-                if (!item.is_dir) {
-                    html += `<button class="btn btn-success btn-icon" onclick="downloadFile('${escapeHtml(item.path)}')">下载</button>`;
-                    html += `<button class="btn btn-icon" onclick="previewFile('${escapeHtml(item.path)}')">预览</button>`;
+                if (item.is_trash) {
+                    // 回收站中的文件：显示恢复和永久删除
+                    html += `<button class="btn btn-success btn-icon" onclick="restoreItem('${escapeHtml(item.undo_id)}')">恢复</button>`;
+                    html += `<button class="btn btn-danger btn-icon" onclick="permanentDeleteItem('${escapeHtml(item.undo_id)}')">永久删除</button>`;
+                } else {
+                    // 普通文件：显示下载、预览、移动、删除
+                    if (!item.is_dir) {
+                        html += `<button class="btn btn-success btn-icon" onclick="downloadFile('${escapeHtml(item.path)}')">下载</button>`;
+                        html += `<button class="btn btn-icon" onclick="previewFile('${escapeHtml(item.path)}')">预览</button>`;
+                    }
+                    html += `<button class="btn btn-icon" onclick="showMoveModal('${escapeHtml(item.path)}')">移动</button>`;
+                    html += `<button class="btn btn-danger btn-icon" onclick="deleteItem('${escapeHtml(item.path)}', ${item.is_dir})">删除</button>`;
                 }
-                html += `<button class="btn btn-icon" onclick="showMoveModal('${escapeHtml(item.path)}')">移动</button>`;
-                html += `<button class="btn btn-danger btn-icon" onclick="deleteItem('${escapeHtml(item.path)}', ${item.is_dir})">删除</button>`;
                 html += `</div>`;
 
                 contentDiv.innerHTML = html;
@@ -973,6 +1129,22 @@
                     children.classList.remove('expanded');
                 }
             }
+        }
+
+        // 处理文件夹名称点击
+        function handleFolderNameClick(event, path, isDir) {
+            event.stopPropagation();
+            const itemDiv = event.target.closest('.tree-item');
+            if (!itemDiv) return;
+            
+            const toggle = itemDiv.querySelector('.tree-toggle');
+            if (toggle) {
+                // 触发展开/收起
+                toggleFolder(event, toggle);
+            }
+            
+            // 同时选中该文件夹
+            selectItem(path, isDir, event);
         }
 
         // 选择项目
@@ -1269,12 +1441,11 @@
             
             if (lastOp.type === 'delete') {
                 try {
-                    const response = await fetch('/api/undo-delete', {
+                    const response = await fetch('/api/restore', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            undo_id: lastOp.undo_id,
-                            original_path: lastOp.original_path
+                            undo_id: lastOp.undo_id
                         })
                     });
 
@@ -1292,6 +1463,104 @@
                 }
             } else {
                 showAlert('该操作不支持撤销', 'error');
+            }
+        }
+
+        // 恢复文件/文件夹
+        async function restoreItem(undoId) {
+            try {
+                const response = await fetch('/api/restore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ undo_id: undoId })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    loadTree();
+                    showAlert('恢复成功！', 'success');
+                } else {
+                    showAlert(`恢复失败: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showAlert(`恢复失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 一键恢复所有文件
+        async function restoreAllItems() {
+            if (!confirm('确定要恢复回收站中的所有文件吗？')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/restore-all', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    loadTree();
+                    showAlert(data.message, 'success');
+                } else {
+                    showAlert(`恢复失败: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showAlert(`恢复失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 清空回收站
+        async function emptyTrash() {
+            if (!confirm('确定要清空回收站吗？此操作不可撤销！')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/empty-trash', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    loadTree();
+                    showAlert(data.message, 'success');
+                } else {
+                    showAlert(`清空失败: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showAlert(`清空失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 永久删除
+        async function permanentDeleteItem(undoId) {
+            if (!confirm('确定要永久删除此文件吗？此操作不可撤销！')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/permanent-delete', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ undo_id: undoId })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    loadTree();
+                    showAlert('永久删除成功！', 'success');
+                } else {
+                    showAlert(`删除失败: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showAlert(`删除失败: ${error.message}`, 'error');
             }
         }
 
@@ -1596,8 +1865,10 @@
             
             const path = itemDiv.dataset.path;
             const isDir = itemDiv.dataset.isDir === 'true';
+            const isTrash = itemDiv.dataset.isTrash === 'true';
+            const undoId = itemDiv.dataset.undoId || null;
             
-            contextMenuTarget = { path, isDir, isRoot: false };
+            contextMenuTarget = { path, isDir, isRoot: false, isTrash, undo_id: undoId };
             selectItem(path, isDir, e);
             showContextMenu(e.pageX, e.pageY, false);
         }
@@ -1610,37 +1881,53 @@
             menu.classList.add('show');
             
             const isFile = contextMenuTarget && !contextMenuTarget.isRoot && !contextMenuTarget.isDir;
+            const isTrash = contextMenuTarget && contextMenuTarget.path === '.trash';
+            const isTrashItem = contextMenuTarget && contextMenuTarget.isTrash;
             
-            // 根据上下文显示/隐藏菜单项
-            const items = menu.querySelectorAll('.context-menu-item');
-            items.forEach((item) => {
-                const text = item.textContent.trim();
-                if (isRoot) {
-                    // 根目录：只显示新建文件和新建文件夹
-                    if (text.includes('新建文件') || text.includes('新建文件夹')) {
-                        item.style.display = 'flex';
-                    } else {
-                        item.style.display = 'none';
-                    }
-                } else if (isFile) {
-                    // 文件：不显示新建文件夹
-                    if (text.includes('新建文件夹')) {
-                        item.style.display = 'none';
-                    } else {
-                        item.style.display = 'flex';
-                    }
-                } else {
-                    // 文件夹：显示所有菜单项
-                    item.style.display = 'flex';
-                }
-            });
+            // 隐藏所有菜单项
+            document.getElementById('menuCreateFile').style.display = 'none';
+            document.getElementById('menuCreateFolder').style.display = 'none';
+            document.getElementById('menuRename').style.display = 'none';
+            document.getElementById('menuMove').style.display = 'none';
+            document.getElementById('menuRestore').style.display = 'none';
+            document.getElementById('menuRestoreAll').style.display = 'none';
+            document.getElementById('menuEmptyTrash').style.display = 'none';
+            document.getElementById('menuDelete').style.display = 'none';
+            document.getElementById('menuPermanentDelete').style.display = 'none';
+            document.getElementById('menuDivider1').style.display = 'none';
+            document.getElementById('menuDivider2').style.display = 'none';
             
-            // 处理分隔线显示
-            const dividers = menu.querySelectorAll('.context-menu-divider');
             if (isRoot) {
-                dividers.forEach(div => div.style.display = 'none');
+                // 根目录：只显示新建文件和新建文件夹
+                document.getElementById('menuCreateFile').style.display = 'flex';
+                document.getElementById('menuCreateFolder').style.display = 'flex';
+            } else if (isTrash) {
+                // .trash文件夹：显示一键恢复和清空回收站
+                document.getElementById('menuRestoreAll').style.display = 'flex';
+                document.getElementById('menuEmptyTrash').style.display = 'flex';
+                document.getElementById('menuDivider1').style.display = 'block';
+            } else if (isTrashItem) {
+                // .trash中的文件：显示恢复和永久删除
+                document.getElementById('menuRestore').style.display = 'flex';
+                document.getElementById('menuPermanentDelete').style.display = 'flex';
+                document.getElementById('menuDivider1').style.display = 'block';
+            } else if (isFile) {
+                // 普通文件：不显示新建文件夹
+                document.getElementById('menuCreateFile').style.display = 'flex';
+                document.getElementById('menuRename').style.display = 'flex';
+                document.getElementById('menuMove').style.display = 'flex';
+                document.getElementById('menuDelete').style.display = 'flex';
+                document.getElementById('menuDivider1').style.display = 'block';
+                document.getElementById('menuDivider2').style.display = 'block';
             } else {
-                dividers.forEach(div => div.style.display = 'block');
+                // 普通文件夹：显示所有菜单项
+                document.getElementById('menuCreateFile').style.display = 'flex';
+                document.getElementById('menuCreateFolder').style.display = 'flex';
+                document.getElementById('menuRename').style.display = 'flex';
+                document.getElementById('menuMove').style.display = 'flex';
+                document.getElementById('menuDelete').style.display = 'flex';
+                document.getElementById('menuDivider1').style.display = 'block';
+                document.getElementById('menuDivider2').style.display = 'block';
             }
         }
 
@@ -1685,6 +1972,38 @@
             hideContextMenu();
             if (contextMenuTarget && !contextMenuTarget.isRoot) {
                 deleteItem(contextMenuTarget.path, contextMenuTarget.isDir);
+            }
+        }
+
+        // 右键菜单：恢复
+        function contextMenuRestore() {
+            hideContextMenu();
+            if (contextMenuTarget && contextMenuTarget.isTrash && contextMenuTarget.undo_id) {
+                restoreItem(contextMenuTarget.undo_id);
+            }
+        }
+
+        // 右键菜单：一键恢复
+        function contextMenuRestoreAll() {
+            hideContextMenu();
+            if (contextMenuTarget && contextMenuTarget.path === '.trash') {
+                restoreAllItems();
+            }
+        }
+
+        // 右键菜单：清空回收站
+        function contextMenuEmptyTrash() {
+            hideContextMenu();
+            if (contextMenuTarget && contextMenuTarget.path === '.trash') {
+                emptyTrash();
+            }
+        }
+
+        // 右键菜单：永久删除
+        function contextMenuPermanentDelete() {
+            hideContextMenu();
+            if (contextMenuTarget && contextMenuTarget.isTrash && contextMenuTarget.undo_id) {
+                permanentDeleteItem(contextMenuTarget.undo_id);
             }
         }
 
@@ -1797,6 +2116,181 @@
                 e.preventDefault();
                 contextMenuTarget = { path: '', isDir: false, isRoot: true };
                 showContextMenu(e.pageX, e.pageY, true);
+            }
+        });
+
+        // 搜索功能
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            
+            // 清除之前的搜索定时器
+            if (searchTimeout) {
+                clearTimeout(searchTimeout);
+            }
+            
+            const resultsDiv = document.getElementById('searchResults');
+            
+            if (!query) {
+                resultsDiv.classList.remove('show');
+                return;
+            }
+            
+            // 延迟搜索，避免频繁请求
+            searchTimeout = setTimeout(async () => {
+                try {
+                    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        displaySearchResults(data.results, data.count);
+                    } else {
+                        resultsDiv.innerHTML = `<div class="search-result-item">搜索失败: ${data.error}</div>`;
+                        resultsDiv.classList.add('show');
+                    }
+                } catch (error) {
+                    resultsDiv.innerHTML = `<div class="search-result-item">搜索失败: ${error.message}</div>`;
+                    resultsDiv.classList.add('show');
+                }
+            }, 300);
+        });
+
+        // 高亮匹配的文字
+        function highlightText(text, query) {
+            if (!query) return escapeHtml(text);
+            
+            const escapedText = escapeHtml(text);
+            const escapedQuery = escapeHtml(query);
+            const regex = new RegExp(`(${escapedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+            
+            return escapedText.replace(regex, '<span class="search-highlight">$1</span>');
+        }
+
+        // 显示搜索结果
+        function displaySearchResults(results, count) {
+            const resultsDiv = document.getElementById('searchResults');
+            const query = document.getElementById('searchInput').value.trim();
+            
+            if (results.length === 0) {
+                resultsDiv.innerHTML = '<div class="search-result-item">未找到匹配的文件或文件夹</div>';
+                resultsDiv.classList.add('show');
+                return;
+            }
+            
+            let html = `<div class="search-result-count">找到 ${count} 个结果</div>`;
+            
+            results.forEach(result => {
+                const icon = result.is_dir ? '📁' : getFileIcon(result.type, result.ext);
+                const highlightedName = highlightText(result.name, query);
+                const highlightedPath = highlightText(result.path, query);
+                
+                html += `
+                    <div class="search-result-item" onclick="navigateToItem('${escapeHtml(result.path)}', ${result.is_dir})">
+                        <span class="search-result-icon">${icon}</span>
+                        <div class="search-result-info">
+                            <div class="search-result-name">${highlightedName}</div>
+                            <div class="search-result-path">${highlightedPath}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            resultsDiv.innerHTML = html;
+            resultsDiv.classList.add('show');
+        }
+
+        // 导航到指定文件/文件夹
+        function navigateToItem(path, isDir) {
+            // 保存当前展开状态
+            saveExpandedState();
+            
+            // 隐藏搜索结果
+            document.getElementById('searchResults').classList.remove('show');
+            document.getElementById('searchInput').value = '';
+            
+            // 展开路径上的所有父文件夹
+            const pathParts = path.split('/');
+            const pathsToExpand = [];
+            for (let i = 1; i < pathParts.length; i++) {
+                pathsToExpand.push(pathParts.slice(0, i).join('/'));
+            }
+            
+            // 重新加载树并展开路径
+            loadTree().then(() => {
+                // 展开所有父文件夹
+                pathsToExpand.forEach(parentPath => {
+                    expandPath(parentPath);
+                });
+                
+                // 滚动到目标项并选中
+                setTimeout(() => {
+                    scrollToItem(path);
+                    selectItem(path, isDir, null);
+                }, 100);
+            });
+        }
+
+        // 保存当前展开状态
+        function saveExpandedState() {
+            expandedPaths.clear();
+            document.querySelectorAll('.tree-toggle.expanded').forEach(toggle => {
+                const item = toggle.closest('.tree-item');
+                if (item) {
+                    const path = item.dataset.path;
+                    if (path) {
+                        expandedPaths.add(path);
+                    }
+                }
+            });
+        }
+
+        // 展开指定路径
+        function expandPath(path) {
+            document.querySelectorAll('.tree-item').forEach(item => {
+                if (item.dataset.path === path) {
+                    const toggle = item.querySelector('.tree-toggle');
+                    const children = item.querySelector('.tree-children');
+                    
+                    if (toggle && children && toggle.classList.contains('collapsed')) {
+                        toggle.classList.remove('collapsed');
+                        toggle.classList.add('expanded');
+                        children.classList.add('expanded');
+                    }
+                }
+            });
+        }
+
+        // 滚动到指定项
+        function scrollToItem(path) {
+            document.querySelectorAll('.tree-item').forEach(item => {
+                if (item.dataset.path === path) {
+                    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // 高亮显示
+                    const content = item.querySelector('.tree-item-content');
+                    if (content) {
+                        content.classList.add('selected');
+                        setTimeout(() => {
+                            content.style.background = '#fff3cd';
+                            setTimeout(() => {
+                                content.style.background = '';
+                            }, 2000);
+                        }, 100);
+                    }
+                }
+            });
+        }
+
+        // 恢复展开状态
+        function restoreExpandedState() {
+            expandedPaths.forEach(path => {
+                expandPath(path);
+            });
+        }
+
+        // 点击其他地方关闭搜索结果
+        document.addEventListener('click', (e) => {
+            const searchBox = document.querySelector('.search-box');
+            if (!searchBox.contains(e.target)) {
+                document.getElementById('searchResults').classList.remove('show');
             }
         });
 

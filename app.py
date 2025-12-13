@@ -150,6 +150,41 @@ def build_tree(directory, base_path=''):
             entry_path = os.path.join(directory, entry)
             rel_path = os.path.join(base_path, entry) if base_path else entry
             
+            # 跳过元数据文件
+            if entry.endswith('.meta'):
+                continue
+            
+            # 如果是.trash目录中的文件，尝试读取原始名称
+            if base_path == '.trash' or (base_path and base_path.startswith('.trash/')):
+                metadata_path = entry_path + '.meta'
+                if os.path.exists(metadata_path):
+                    try:
+                        with open(metadata_path, 'r', encoding='utf-8') as f:
+                            metadata = json.load(f)
+                            original_name = metadata.get('original_name', entry)
+                            original_path = metadata.get('original_path', '')
+                            
+                            if os.path.isdir(entry_path):
+                                folder_info = get_folder_info(entry_path, rel_path)
+                                folder_info['name'] = original_name  # 使用原始名称
+                                folder_info['original_name'] = original_name
+                                folder_info['original_path'] = original_path
+                                folder_info['undo_id'] = entry
+                                folder_info['is_trash'] = True
+                                folder_info['children'] = build_tree(entry_path, rel_path)
+                                items.append(folder_info)
+                            else:
+                                file_info = get_file_info(entry_path, rel_path)
+                                file_info['name'] = original_name  # 使用原始名称
+                                file_info['original_name'] = original_name
+                                file_info['original_path'] = original_path
+                                file_info['undo_id'] = entry
+                                file_info['is_trash'] = True
+                                items.append(file_info)
+                            continue
+                    except:
+                        pass
+            
             if os.path.isdir(entry_path):
                 folder_info = get_folder_info(entry_path, rel_path)
                 folder_info['children'] = build_tree(entry_path, rel_path)
@@ -191,6 +226,95 @@ def get_tree():
         upload_folder = app.config['UPLOAD_FOLDER']
         tree = build_tree(upload_folder)
         return jsonify({'success': True, 'tree': tree})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/search', methods=['GET'])
+def search_files():
+    """搜索文件和文件夹"""
+    try:
+        query = request.args.get('q', '').strip()
+        if not query:
+            return jsonify({'success': False, 'error': '搜索关键词不能为空'}), 400
+        
+        upload_folder = app.config['UPLOAD_FOLDER']
+        results = []
+        
+        # 递归搜索文件和文件夹
+        def search_in_directory(directory, base_path=''):
+            try:
+                for entry in os.listdir(directory):
+                    entry_path = os.path.join(directory, entry)
+                    rel_path = os.path.join(base_path, entry) if base_path else entry
+                    
+                    # 跳过元数据文件
+                    if entry.endswith('.meta'):
+                        continue
+                    
+                    # 处理.trash目录中的文件（显示原始名称）
+                    search_name = entry
+                    if base_path == '.trash' or (base_path and base_path.startswith('.trash/')):
+                        metadata_path = entry_path + '.meta'
+                        if os.path.exists(metadata_path):
+                            try:
+                                with open(metadata_path, 'r', encoding='utf-8') as f:
+                                    metadata = json.load(f)
+                                    search_name = metadata.get('original_name', entry)
+                            except:
+                                pass
+                    
+                    # 检查名称是否匹配
+                    if query.lower() in search_name.lower():
+                        if os.path.isdir(entry_path):
+                            folder_info = get_folder_info(entry_path, rel_path)
+                            # 如果是.trash中的文件，使用原始名称
+                            if base_path == '.trash' or (base_path and base_path.startswith('.trash/')):
+                                metadata_path = entry_path + '.meta'
+                                if os.path.exists(metadata_path):
+                                    try:
+                                        with open(metadata_path, 'r', encoding='utf-8') as f:
+                                            metadata = json.load(f)
+                                            folder_info['name'] = metadata.get('original_name', entry)
+                                            folder_info['original_path'] = metadata.get('original_path', '')
+                                            folder_info['is_trash'] = True
+                                    except:
+                                        pass
+                            folder_info['match_type'] = 'folder'
+                            results.append(folder_info)
+                        else:
+                            file_info = get_file_info(entry_path, rel_path)
+                            # 如果是.trash中的文件，使用原始名称
+                            if base_path == '.trash' or (base_path and base_path.startswith('.trash/')):
+                                metadata_path = entry_path + '.meta'
+                                if os.path.exists(metadata_path):
+                                    try:
+                                        with open(metadata_path, 'r', encoding='utf-8') as f:
+                                            metadata = json.load(f)
+                                            file_info['name'] = metadata.get('original_name', entry)
+                                            file_info['original_path'] = metadata.get('original_path', '')
+                                            file_info['is_trash'] = True
+                                    except:
+                                        pass
+                            file_info['match_type'] = 'file'
+                            results.append(file_info)
+                    
+                    # 递归搜索子目录（包括.trash目录）
+                    if os.path.isdir(entry_path):
+                        search_in_directory(entry_path, rel_path)
+            except:
+                pass
+        
+        search_in_directory(upload_folder)
+        
+        # 按名称排序
+        results.sort(key=lambda x: x['name'].lower())
+        
+        return jsonify({
+            'success': True,
+            'results': results,
+            'count': len(results)
+        })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -645,6 +769,17 @@ def delete_item():
         undo_id = str(uuid.uuid4())
         temp_path = os.path.join(temp_dir, undo_id)
         
+        # 保存原始信息到元数据文件
+        metadata = {
+            'original_path': item_path,
+            'original_name': item_info['name'],
+            'is_dir': is_dir,
+            'deleted_at': datetime.now().isoformat()
+        }
+        metadata_path = os.path.join(temp_dir, undo_id + '.meta')
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, ensure_ascii=False)
+        
         # 移动而不是删除
         shutil.move(itempath, temp_path)
         
@@ -658,22 +793,33 @@ def delete_item():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/undo-delete', methods=['POST'])
-def undo_delete():
-    """撤销删除操作"""
+@app.route('/api/restore', methods=['POST'])
+def restore_item():
+    """恢复文件或文件夹"""
     try:
         data = request.get_json()
         undo_id = data.get('undo_id', '')
-        original_path = data.get('original_path', '')
         
-        if not undo_id or not original_path:
+        if not undo_id:
             return jsonify({'success': False, 'error': '参数不完整'}), 400
         
         temp_dir = os.path.join(app.config['UPLOAD_FOLDER'], '.trash')
         temp_path = os.path.join(temp_dir, undo_id)
+        metadata_path = os.path.join(temp_dir, undo_id + '.meta')
         
         if not os.path.exists(temp_path):
-            return jsonify({'success': False, 'error': '无法撤销，文件已永久删除'}), 404
+            return jsonify({'success': False, 'error': '文件不存在'}), 404
+        
+        # 读取元数据
+        if not os.path.exists(metadata_path):
+            return jsonify({'success': False, 'error': '元数据文件不存在'}), 404
+        
+        with open(metadata_path, 'r', encoding='utf-8') as f:
+            metadata = json.load(f)
+        
+        original_path = metadata.get('original_path', '')
+        if not original_path:
+            return jsonify({'success': False, 'error': '原始路径信息缺失'}), 400
         
         # 恢复文件
         restore_path = os.path.join(app.config['UPLOAD_FOLDER'], original_path)
@@ -687,6 +833,9 @@ def undo_delete():
             return jsonify({'success': False, 'error': '目标位置已存在同名文件或文件夹'}), 400
         
         shutil.move(temp_path, restore_path)
+        # 删除元数据文件
+        if os.path.exists(metadata_path):
+            os.remove(metadata_path)
         
         # 返回恢复后的信息
         if os.path.isdir(restore_path):
@@ -696,9 +845,146 @@ def undo_delete():
         
         return jsonify({
             'success': True,
-            'message': '撤销成功',
+            'message': '恢复成功',
             'item': item_info
         })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/restore-all', methods=['POST'])
+def restore_all():
+    """恢复回收站中的所有文件"""
+    try:
+        temp_dir = os.path.join(app.config['UPLOAD_FOLDER'], '.trash')
+        if not os.path.exists(temp_dir):
+            return jsonify({'success': True, 'message': '回收站为空', 'restored_count': 0})
+        
+        restored_count = 0
+        failed_count = 0
+        
+        # 遍历回收站中的所有文件
+        for entry in os.listdir(temp_dir):
+            if entry.endswith('.meta'):
+                continue
+            
+            entry_path = os.path.join(temp_dir, entry)
+            metadata_path = entry_path + '.meta'
+            
+            if not os.path.exists(metadata_path):
+                continue
+            
+            try:
+                with open(metadata_path, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+                
+                original_path = metadata.get('original_path', '')
+                if not original_path:
+                    continue
+                
+                restore_path = os.path.join(app.config['UPLOAD_FOLDER'], original_path)
+                
+                # 如果目标位置已存在，跳过
+                if os.path.exists(restore_path):
+                    failed_count += 1
+                    continue
+                
+                # 确保父目录存在
+                parent_dir = os.path.dirname(restore_path)
+                if parent_dir:
+                    os.makedirs(parent_dir, exist_ok=True)
+                
+                shutil.move(entry_path, restore_path)
+                os.remove(metadata_path)
+                restored_count += 1
+            except Exception as e:
+                failed_count += 1
+                continue
+        
+        return jsonify({
+            'success': True,
+            'message': f'成功恢复 {restored_count} 个项目',
+            'restored_count': restored_count,
+            'failed_count': failed_count
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/empty-trash', methods=['POST'])
+def empty_trash():
+    """清空回收站"""
+    try:
+        temp_dir = os.path.join(app.config['UPLOAD_FOLDER'], '.trash')
+        if not os.path.exists(temp_dir):
+            return jsonify({'success': True, 'message': '回收站已为空'})
+        
+        deleted_count = 0
+        for entry in os.listdir(temp_dir):
+            entry_path = os.path.join(temp_dir, entry)
+            try:
+                if os.path.isdir(entry_path):
+                    shutil.rmtree(entry_path)
+                else:
+                    os.remove(entry_path)
+                deleted_count += 1
+            except:
+                pass
+        
+        return jsonify({
+            'success': True,
+            'message': f'已清空回收站，删除了 {deleted_count} 个项目',
+            'deleted_count': deleted_count
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/permanent-delete', methods=['DELETE'])
+def permanent_delete():
+    """永久删除回收站中的文件"""
+    try:
+        data = request.get_json()
+        undo_id = data.get('undo_id', '')
+        
+        if not undo_id:
+            return jsonify({'success': False, 'error': '参数不完整'}), 400
+        
+        temp_dir = os.path.join(app.config['UPLOAD_FOLDER'], '.trash')
+        temp_path = os.path.join(temp_dir, undo_id)
+        metadata_path = os.path.join(temp_dir, undo_id + '.meta')
+        
+        if not os.path.exists(temp_path):
+            return jsonify({'success': False, 'error': '文件不存在'}), 404
+        
+        # 永久删除
+        if os.path.isdir(temp_path):
+            shutil.rmtree(temp_path)
+        else:
+            os.remove(temp_path)
+        
+        # 删除元数据文件
+        if os.path.exists(metadata_path):
+            os.remove(metadata_path)
+        
+        return jsonify({'success': True, 'message': '永久删除成功'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/undo-delete', methods=['POST'])
+def undo_delete():
+    """撤销删除操作（兼容旧版本）"""
+    try:
+        data = request.get_json()
+        undo_id = data.get('undo_id', '')
+        original_path = data.get('original_path', '')
+        
+        if not undo_id:
+            return jsonify({'success': False, 'error': '参数不完整'}), 400
+        
+        # 尝试使用新的恢复API
+        return restore_item()
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
