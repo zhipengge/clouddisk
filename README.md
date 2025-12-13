@@ -26,7 +26,8 @@ pip install pipenv
 
 2. 使用指定的Python解释器安装依赖：
 ```bash
-pipenv install --python /Users/gezhipeng/anaconda3/bin/python3
+pipenv install --python 3.10 # 或者指定python interpreter
+poinenv install --python /path/to/python
 ```
 
 3. 激活虚拟环境：
