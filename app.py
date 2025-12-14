@@ -492,6 +492,58 @@ def pdf_to_jpg():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/save-edited-image', methods=['POST'])
+def save_edited_image():
+    """保存编辑后的图片（不覆盖原图，保存为新文件）"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': '没有上传文件'}), 400
+        
+        file = request.files['file']
+        file_path = request.form.get('path', '').strip()
+        
+        if not file_path:
+            return jsonify({'success': False, 'error': '文件路径不能为空'}), 400
+        
+        original_path = os.path.join(app.config['UPLOAD_FOLDER'], file_path)
+        
+        if not path_utils.get_relative_path(original_path, app.config['UPLOAD_FOLDER']):
+            return jsonify({'success': False, 'error': '无效的文件路径'}), 400
+        
+        # 生成新文件名（不覆盖原图）
+        path_parts = file_path.rsplit('.', 1)
+        if len(path_parts) == 2:
+            new_file_path = f"{path_parts[0]}_edited.{path_parts[1]}"
+        else:
+            new_file_path = f"{file_path}_edited"
+        
+        # 如果文件已存在，添加数字后缀
+        counter = 1
+        while os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], new_file_path)):
+            if len(path_parts) == 2:
+                new_file_path = f"{path_parts[0]}_edited_{counter}.{path_parts[1]}"
+            else:
+                new_file_path = f"{file_path}_edited_{counter}"
+            counter += 1
+        
+        target_path = os.path.join(app.config['UPLOAD_FOLDER'], new_file_path)
+        
+        # 保存文件
+        file.save(target_path)
+        
+        # 获取文件信息
+        file_info_data = file_info.get_file_info(target_path, new_file_path)
+        
+        return jsonify({
+            'success': True,
+            'message': f'图片已保存为新文件: {new_file_path}',
+            'file': file_info_data,
+            'new_path': new_file_path
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/preview', methods=['GET'])
 def preview_file():
     """预览文件"""
@@ -512,7 +564,23 @@ def preview_file():
         ext = file_info_data['ext'].lower()
         
         if file_info_data['type'] == 'image':
-            return send_file(filepath, mimetype=f'image/{ext[1:]}')
+            # 根据扩展名确定正确的MIME类型
+            mime_types = {
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.png': 'image/png',
+                '.gif': 'image/gif',
+                '.bmp': 'image/bmp',
+                '.webp': 'image/webp',
+                '.svg': 'image/svg+xml',
+                '.ico': 'image/x-icon'
+            }
+            mimetype = mime_types.get(ext, 'image/jpeg')
+            response = send_file(filepath, mimetype=mimetype)
+            # 添加CORS头，允许跨域加载图片
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Cache-Control'] = 'public, max-age=3600'
+            return response
         elif file_info_data['type'] == 'text':
             try:
                 with open(filepath, 'r', encoding='utf-8') as f:
