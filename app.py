@@ -16,7 +16,7 @@ from urllib.parse import quote
 import config
 
 # 导入自定义模块
-from src import utils, path_utils, file_info, file_tree, search
+from src import utils, path_utils, file_info, file_tree, search, pdf_utils
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = config.MAX_CONTENT_LENGTH
@@ -369,17 +369,126 @@ def download_file():
             return jsonify({'success': False, 'error': '文件不存在'}), 404
         
         filename = os.path.basename(filepath)
+        
+        # 处理中文文件名编码问题
+        # HTTP头必须使用ASCII或latin-1编码，中文需要使用RFC 5987标准
+        safe_filename = filename
+        if any(ord(c) > 127 for c in filename):
+            # 创建ASCII安全的fallback文件名
+            try:
+                ascii_chars = ''.join(c if ord(c) < 128 else '_' for c in filename)
+                safe_filename = ascii_chars if ascii_chars else 'download'
+            except:
+                safe_filename = 'download'
+        
         response = send_file(
             filepath,
             as_attachment=True,
-            download_name=filename
+            download_name=safe_filename  # 使用ASCII安全的文件名
         )
+        
         # 确保中文文件名正确显示（使用RFC 5987标准）
         if any(ord(c) > 127 for c in filename):
             encoded_filename = quote(filename.encode('utf-8'))
-            response.headers['Content-Disposition'] = f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}'
+            response.headers['Content-Disposition'] = f'attachment; filename="{safe_filename}"; filename*=UTF-8\'\'{encoded_filename}'
+        
         return response
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/pdf-to-jpg', methods=['POST'])
+def pdf_to_jpg():
+    """将PDF文件转换为JPG图片并打包为ZIP下载"""
+    zip_path = None
+    try:
+        data = request.get_json()
+        file_path = data.get('path', '').strip()
+        
+        if not file_path:
+            return jsonify({'success': False, 'error': '文件路径不能为空'}), 400
+        
+        pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], file_path)
+        
+        if not path_utils.get_relative_path(pdf_path, app.config['UPLOAD_FOLDER']):
+            return jsonify({'success': False, 'error': '无效的文件路径'}), 400
+        
+        if not os.path.exists(pdf_path) or not os.path.isfile(pdf_path):
+            return jsonify({'success': False, 'error': '文件不存在'}), 404
+        
+        if not pdf_utils.is_pdf_file(pdf_path):
+            return jsonify({'success': False, 'error': '文件不是PDF格式'}), 400
+        
+        # 生成ZIP文件路径（使用临时目录）
+        import tempfile
+        import uuid
+        pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        # 使用UUID确保文件名唯一，避免并发冲突
+        unique_id = str(uuid.uuid4())[:8]
+        temp_dir = tempfile.gettempdir()
+        zip_filename = f"{pdf_name}_images_{unique_id}.zip"
+        zip_path = os.path.join(temp_dir, zip_filename)
+        
+        # 转换PDF为JPG并打包
+        pdf_utils.pdf_to_jpg_zip(pdf_path, zip_path, dpi=200)
+        
+        if not os.path.exists(zip_path):
+            return jsonify({'success': False, 'error': '转换失败'}), 500
+        
+        # 返回ZIP文件
+        download_filename = f"{pdf_name}_images.zip"
+        
+        # 处理中文文件名编码问题
+        # HTTP头必须使用ASCII或latin-1编码，中文需要使用RFC 5987标准
+        # 先创建一个ASCII安全的fallback文件名
+        safe_filename = 'images.zip'
+        try:
+            # 尝试提取ASCII字符作为fallback
+            ascii_chars = ''.join(c if ord(c) < 128 else '' for c in pdf_name)
+            if ascii_chars:
+                safe_filename = f"{ascii_chars}_images.zip"
+        except:
+            pass
+        
+        # 构建Content-Disposition头
+        if any(ord(c) > 127 for c in download_filename):
+            # 使用RFC 5987标准编码中文文件名
+            encoded_filename = quote(download_filename.encode('utf-8'))
+            # filename必须是ASCII，filename*用于UTF-8编码的文件名
+            content_disposition = f'attachment; filename="{safe_filename}"; filename*=UTF-8\'\'{encoded_filename}'
+        else:
+            content_disposition = f'attachment; filename="{download_filename}"'
+        
+        response = send_file(
+            zip_path,
+            as_attachment=True,
+            download_name=safe_filename,  # 使用ASCII安全的文件名
+            mimetype='application/zip'
+        )
+        
+        # 设置Content-Disposition头（确保使用ASCII安全的值）
+        response.headers['Content-Disposition'] = content_disposition
+        
+        # 设置Content-Type
+        response.headers['Content-Type'] = 'application/zip'
+        
+        # 使用after_request钩子清理临时文件
+        @response.call_on_close
+        def cleanup():
+            if zip_path and os.path.exists(zip_path):
+                try:
+                    os.unlink(zip_path)
+                except:
+                    pass
+        
+        return response
+    except Exception as e:
+        # 确保出错时也清理临时文件
+        if zip_path and os.path.exists(zip_path):
+            try:
+                os.unlink(zip_path)
+            except:
+                pass
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

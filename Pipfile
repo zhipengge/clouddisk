@@ -6,6 +6,8 @@ name = "pypi"
 [packages]
 flask = "*"
 werkzeug = "*"
+pdf2image = "*"
+pillow = "*"
 
 [dev-packages]
 

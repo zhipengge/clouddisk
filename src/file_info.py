@@ -68,3 +68,4 @@ def get_folder_info(folderpath, rel_path=''):
         'is_dir': True
     }
 
+

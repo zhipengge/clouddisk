@@ -977,6 +977,7 @@ function showContextMenu(x, y, isRoot) {
     document.getElementById('menuCreateFolder').style.display = 'none';
     document.getElementById('menuRename').style.display = 'none';
     document.getElementById('menuMove').style.display = 'none';
+    document.getElementById('menuPdfToJpg').style.display = 'none';
     document.getElementById('menuRestore').style.display = 'none';
     document.getElementById('menuRestoreAll').style.display = 'none';
     document.getElementById('menuEmptyTrash').style.display = 'none';
@@ -1007,6 +1008,11 @@ function showContextMenu(x, y, isRoot) {
         document.getElementById('menuDelete').style.display = 'flex';
         document.getElementById('menuDivider1').style.display = 'block';
         document.getElementById('menuDivider2').style.display = 'block';
+        
+        // 如果是PDF文件，显示导出为JPG选项
+        if (contextMenuTarget && contextMenuTarget.path.toLowerCase().endsWith('.pdf')) {
+            document.getElementById('menuPdfToJpg').style.display = 'flex';
+        }
     } else {
         // 普通文件夹：显示所有菜单项
         document.getElementById('menuCreateFile').style.display = 'flex';
@@ -1092,6 +1098,14 @@ function contextMenuPermanentDelete() {
     hideContextMenu();
     if (contextMenuTarget && contextMenuTarget.isTrash && contextMenuTarget.undo_id) {
         permanentDeleteItem(contextMenuTarget.undo_id);
+    }
+}
+
+// 右键菜单：PDF导出为JPG
+function contextMenuPdfToJpg() {
+    hideContextMenu();
+    if (contextMenuTarget && !contextMenuTarget.isRoot && !contextMenuTarget.isDir) {
+        exportPdfToJpg(contextMenuTarget.path);
     }
 }
 
@@ -1372,6 +1386,154 @@ function restoreExpandedState() {
     expandedPaths.forEach(path => {
         expandPath(path);
     });
+}
+
+// PDF导出为JPG
+async function exportPdfToJpg(path) {
+    if (!path || !path.toLowerCase().endsWith('.pdf')) {
+        showAlert('只能导出PDF文件', 'error');
+        return;
+    }
+
+    try {
+        showAlert('正在转换PDF为JPG，请稍候...', 'info');
+        
+        const response = await fetch('/api/pdf-to-jpg', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: path })
+        });
+
+        // 检查响应类型
+        const contentType = response.headers.get('Content-Type');
+        console.log('Response Content-Type:', contentType);
+        
+        if (!response.ok) {
+            // 尝试解析错误信息
+            let errorMsg = '转换失败';
+            try {
+                const errorData = await response.json();
+                errorMsg = errorData.error || errorMsg;
+            } catch (e) {
+                errorMsg = await response.text() || errorMsg;
+            }
+            throw new Error(errorMsg);
+        }
+
+        // 检查响应是否为ZIP文件
+        if (!contentType || !contentType.includes('zip') && !contentType.includes('octet-stream')) {
+            // 如果不是ZIP文件，可能是错误信息
+            const text = await response.text();
+            try {
+                const errorData = JSON.parse(text);
+                throw new Error(errorData.error || '转换失败');
+            } catch (e) {
+                throw new Error('服务器返回了非ZIP文件');
+            }
+        }
+
+        // 获取文件名
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'images.zip';
+        if (contentDisposition) {
+            // 尝试多种方式解析文件名
+            let matches = contentDisposition.match(/filename\*?=['"]?([^'";]+)['"]?/i);
+            if (matches && matches[1]) {
+                filename = matches[1];
+                // 处理UTF-8编码的文件名
+                if (filename.includes("UTF-8''")) {
+                    filename = decodeURIComponent(filename.split("UTF-8''")[1]);
+                } else if (filename.startsWith("UTF-8''")) {
+                    filename = decodeURIComponent(filename.substring(7));
+                }
+            } else {
+                // 尝试另一种格式
+                matches = contentDisposition.match(/filename=([^;]+)/);
+                if (matches && matches[1]) {
+                    filename = matches[1].trim().replace(/['"]/g, '');
+                }
+            }
+        }
+        
+        console.log('Download filename:', filename);
+
+        // 下载文件
+        const blob = await response.blob();
+        console.log('Blob size:', blob.size, 'bytes');
+        
+        if (blob.size === 0) {
+            throw new Error('下载的文件为空，可能转换失败');
+        }
+        
+        // 显示成功消息和下载提示
+        const fileSizeMB = (blob.size / (1024 * 1024)).toFixed(2);
+        showAlert(`✅ 转换成功！文件大小: ${fileSizeMB}MB，正在下载...`, 'success');
+        
+        // 创建下载链接
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        
+        // 创建一个可见的下载按钮作为备选方案
+        const alertContainer = document.getElementById('alertContainer');
+        let downloadBtn = null;
+        
+        if (alertContainer) {
+            // 移除之前的下载按钮（如果有）
+            const oldBtn = alertContainer.querySelector('.pdf-download-btn');
+            if (oldBtn) oldBtn.remove();
+            
+            downloadBtn = document.createElement('button');
+            downloadBtn.className = 'btn btn-success pdf-download-btn';
+            downloadBtn.style.margin = '10px 0';
+            downloadBtn.style.display = 'block';
+            downloadBtn.innerHTML = `📥 点击下载: ${filename} (${fileSizeMB}MB)`;
+            downloadBtn.onclick = (e) => {
+                e.preventDefault();
+                a.click();
+                downloadBtn.innerHTML = '✅ 下载中...';
+                downloadBtn.disabled = true;
+                setTimeout(() => {
+                    downloadBtn.remove();
+                    window.URL.revokeObjectURL(url);
+                }, 2000);
+            };
+            alertContainer.appendChild(downloadBtn);
+        }
+        
+        // 尝试自动触发下载
+        try {
+            a.click();
+            
+            // 延迟清理，确保下载开始
+            setTimeout(() => {
+                if (downloadBtn && downloadBtn.parentNode) {
+                    // 如果按钮还在，说明可能需要手动下载
+                    downloadBtn.innerHTML = `📥 点击下载: ${filename} (${fileSizeMB}MB) - 如果未自动下载`;
+                } else {
+                    // 下载成功，清理
+                    if (document.body.contains(a)) {
+                        document.body.removeChild(a);
+                    }
+                    window.URL.revokeObjectURL(url);
+                }
+            }, 2000);
+            
+            // 显示最终提示
+            setTimeout(() => {
+                showAlert(`📦 下载完成！文件名: ${filename}，请检查浏览器的下载文件夹（通常在"下载"文件夹中）。如果未自动下载，请点击上方的下载按钮。`, 'success');
+            }, 1000);
+        } catch (error) {
+            console.error('自动下载失败:', error);
+            showAlert('⚠️ 自动下载可能被浏览器阻止，请点击上方的下载按钮手动下载', 'warning');
+        }
+    } catch (error) {
+        console.error('PDF转JPG失败:', error);
+        showAlert(`转换失败: ${error.message}`, 'error');
+    }
 }
 
 // 点击其他地方关闭搜索结果

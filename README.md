@@ -13,6 +13,7 @@
 - ✅ **文件预览**：支持图片、文本、PDF、视频、音频等文件预览
 - ✅ **文件搜索**：实时搜索，支持文件名和路径搜索，匹配文字高亮显示
 - ✅ **上传进度条**：实时显示上传进度
+- ✅ **PDF转JPG**：右键PDF文件可批量导出为JPG图片并打包为ZIP下载
 
 ### 📂 文件夹管理
 - ✅ **创建文件夹**：支持在任意位置创建文件夹
@@ -58,15 +59,50 @@
 
 - Python 3.6+
 - pipenv
+- poppler-utils (用于PDF转JPG功能)
+  - macOS: `brew install poppler`
+  - Ubuntu/Debian: `sudo apt-get install poppler-utils`
+  - Windows: 下载并安装 [poppler for Windows](http://blog.alivate.com.au/poppler-windows/)
 
 ### 安装步骤
 
-1. **安装pipenv**（如果未安装）：
+1. **安装poppler**（如果使用PDF转JPG功能，必须先安装）：
+   
+   **方式1 - Homebrew (推荐，macOS)**:
+   ```bash
+   brew install poppler
+   ```
+   安装后验证：
+   ```bash
+   brew list poppler
+   which pdftoppm
+   ```
+   
+   **方式2 - Conda (如果使用conda环境)**:
+   ```bash
+   conda install -c conda-forge poppler
+   ```
+   安装后验证：
+   ```bash
+   conda list poppler
+   which pdftoppm
+   ```
+   
+   **其他系统**:
+   - Ubuntu/Debian: `sudo apt-get install poppler-utils`
+   - Windows: 下载并安装 [poppler for Windows](http://blog.alivate.com.au/poppler-windows/)，并确保添加到系统PATH中
+   
+   **重要提示**：
+   - 安装后必须重启应用才能生效
+   - 如果使用pipenv，请确保在 `pipenv run` 环境中运行应用
+   - 如果仍无法找到，请检查PATH环境变量是否包含poppler的bin目录
+
+2. **安装pipenv**（如果未安装）：
 ```bash
 pip install pipenv
 ```
 
-2. **使用指定的Python解释器安装依赖**：
+3. **使用指定的Python解释器安装依赖**：
 ```bash
 pipenv install --python /path/to/python
 ```
@@ -76,21 +112,24 @@ pipenv install --python /path/to/python
 pipenv install --python 3.10
 ```
 
-3. **激活虚拟环境**：
+4. **激活虚拟环境**（可选）：
 ```bash
 pipenv shell
 ```
 
 ### 运行应用
 
-1. **启动应用**：
-```bash
-python app.py
-```
+**重要**：所有命令都需要在 `pipenv run` 环境中运行，或者在激活的虚拟环境中运行。
 
-或者使用pipenv运行：
+1. **启动应用**（推荐使用pipenv run）：
 ```bash
 pipenv run python app.py
+```
+
+或者先激活虚拟环境：
+```bash
+pipenv shell
+python app.py
 ```
 
 2. **访问应用**：
@@ -218,6 +257,7 @@ clouddisk/
 - 重命名
 - 移动
 - 删除
+- 导出为JPG（仅PDF文件）
 
 #### 在文件夹上右键
 - 新建文件

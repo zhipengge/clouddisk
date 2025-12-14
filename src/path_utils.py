@@ -14,3 +14,4 @@ def get_relative_path(path, upload_folder):
         return None
     return os.path.relpath(abs_path, upload_folder)
 
+

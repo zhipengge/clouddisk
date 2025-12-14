@@ -67,3 +67,4 @@ def get_total_size(directory):
         pass
     return total
 
+
